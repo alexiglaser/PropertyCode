@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[140]:
+# In[2]:
 
 """
 python-gumtree
@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 gumtreeURL = "https://www.gumtree.com"
 
 
-# In[150]:
+# In[141]:
 
 class SearchListing:
     """
@@ -46,6 +46,7 @@ class SearchListing:
         """
 
         url = "https://www.gumtree.com/search?distance=%s&search_category=%s&q=%s&search_location=%s" % (self.distance, self.category.replace(" ", "+"), self.query.replace(" ", "+"), self.location.replace(" ", "+"))
+        #print url
         request = requests.get(url, headers=REQUEST_HEADERS)
 
         if request.status_code == 200:
@@ -60,11 +61,19 @@ class SearchListing:
                     for listing in listings_wrapper.find_all("a", class_="listing-link"):
                         item_instance = GTItem(title=title)
                         item_instance.url = gumtreeURL + listing.get("href")
-                        item_instance.price = listing.find(itemprop="price").get_text()
+                        price = listing.find(itemprop="price")
+                        if price is not None:
+                            item_instance.price = price.get_text()
+                        else:
+                            item_instance.price = None
                         item_instance.description = listing.find(itemprop="description").get_text()
                         item_instance.location =  listing.find(class_="listing-location").get_text()
                         item_instance.thumbnail = listing.find(class_="listing-thumbnail").get("src")
-                        item_instance.adrecency = listing.find(itemprop="adAge").get_text()
+                        adrecency = listing.find(itemprop="adAge")
+                        if adrecency is not None: 
+                            item_instance.adrecency = adrecency.get_text()
+                        else:
+                            item_instance.adrecency = None
                         item_instance.adref = title.split("-")[-1]
                         
                     listing_results.append(item_instance)
@@ -75,7 +84,7 @@ class SearchListing:
             return []
 
 
-# In[207]:
+# In[142]:
 
 class GTItem:
     """
@@ -143,7 +152,7 @@ class GTItem:
         """
         Scrape information from a full gumtree advert page
         """
-        print self.url
+        #print self.url
         request = requests.get(self.url, headers=REQUEST_HEADERS)
         if request.status_code == 200:
             # Got a valid response
@@ -153,9 +162,9 @@ class GTItem:
             #    self._description = description.strip()
             #else:
             #    self._description = ""
-            _contact_name = souped.find("h2", itemprop="name").get_text()
-            _contact_number = souped.find("strong", itemprop="telephone").get_text()
-            print _contact_number
+            #_contact_name = souped.find("h2", itemprop="name").get_text()
+            #_contact_number = souped.find("strong", itemprop="telephone").get_text()
+            #print _contact_number
             #if not contact:
             #    self._contact_name, self._contact_number = ["",""]
             #else:
@@ -177,20 +186,125 @@ class GTItem:
             return []
 
 
-# In[210]:
+# In[ ]:
+
+# Get all locations
+url = "https://www.gumtree.com/all/central-london/2+bedroom+flat"
+request = requests.get(url, headers=REQUEST_HEADERS)
+
+
+# In[111]:
 
 # Need to find a way of scrolling over mutliple pages
 # Add list so that you can scroll over location data
-s = SearchListing(query="2 bedroom flat", location="kings cross")
+s = dict()
+if request.status_code == 200:
+    # Got a valid response
+    souped = BeautifulSoup(request.text, "html.parser")
+    for location_id in souped.find_all("div", class_="box space-mbs"):
+        for location in location_id.find_all("a", class_="space-mrxs"): 
+            s_location = location.get_text().replace(" ", "+")
+            s[s_location] = SearchListing(query="2 bedroom flat", location=s_location)
 
 
-# In[217]:
+# In[143]:
 
-for item in items:
-    print item.location, item.title, item.price
+items = dict()
+for key in s:
+    items[key] = s[key].doSearch()
 
 
-# In[215]:
+# In[144]:
 
-dir(items[0])
+i = 0
+for key in s:
+    for item in items[key]:
+        if i == 0:
+            print dir(item)
+        i += 1
+print i
+
+
+# In[174]:
+
+# Write to csv file
+import csv
+f = open("all_adverts.csv", 'wt')
+writer = csv.writer(f)
+#writer.writerow(('_contact_name, item._contact_number, item._description, item._images, item._longitude, item.adrecency, item.adref, item.contact_name, item.contact_number, item.description, item.getFullInformation, item.images, item.latitude, item.location, item.longitude, item.price, item.summary, item.thumbnail, item.title, item.url'))
+writer.writerow(('adrecency', 'adref', 'description', 'images', 'location', 'price', 'summary', 'thumbnail', 'title', 'url'))
+for key in s:
+    for item in items[key]:
+        #print item.url
+        if item.price is None:
+            item.price = "-"
+        #print item.adrecency, item.adref, item.description, item.images, item.latitude, item.location, item.longitude, item.price, item.summary, item.thumbnail, item.title, item.url
+        writer.writerow((item.adrecency, item.adref, item.description.encode('utf-8').strip(), item.images, item.location, item.price.encode('utf-8').strip(), item.summary, item.thumbnail, item.title, item.url.encode('utf-8').strip()))
+        #.encode('utf-8').strip()
+        #writer.writerow(item._contact_name, item._contact_number, item._description, item._images, item._longitude, item.adrecency, item.adref, item.contact_name, item.contact_number, item.description, item.getFullInformation, item.images, item.latitude, item.location, item.longitude, item.price, item.summary, item.thumbnail, item.title, item.url)
+
+
+# In[45]:
+
+url = "https://www.gumtree.com/all/central-london/2+bedroom+flat"
+#url = "https://www.gumtree.com/search?distance=0&search_category=all&q=2+bedroom+flat&search_location=Central+London"
+request = requests.get(url, headers=REQUEST_HEADERS)
+
+
+# In[48]:
+
+if request.status_code == 200:
+    # Got a valid response
+    souped = BeautifulSoup(request.text, "html.parser")
+    #print souped
+    for location_and_value in souped.find_all("div", class_="box space-mbs"):
+        #print location_and_value
+        for location in location_and_value.find_all("a", class_="space-mrxs"): 
+            print location.get_text().replace(" ", "+")
+
+
+# In[27]:
+
+if request.status_code == 200:
+    # Got a valid response
+    souped = BeautifulSoup(request.text, "html.parser")
+    #print souped
+    for location in souped.find_all("a", class_="space-mrxs"): 
+        print location#.get_text().replace(" ", "+")
+
+
+# In[30]:
+
+print souped.find_all("a", class_="space-mrxs")
+
+
+# In[33]:
+
+print souped.find_all(class_="box space-mbs")
+
+
+# In[61]:
+
+url2 = "https://www.gumtree.com/all/shoreditch/2+bedroom+flat"
+request2 = requests.get(url2, headers=REQUEST_HEADERS)
+if request2.status_code == 200:
+    # Got a valid response
+    souped2 = BeautifulSoup(request2.text, "html.parser")
+    #for location_id in souped.find_all("div", class_="box space-mbs"):
+    #    for location in location_id.find_all("a", class_="space-mrxs"): 
+    #        s_location = location.get_text().replace(" ", "+")
+    #        s[s_location] = SearchListing(query="2 bedroom flat", location=s_location)
+
+
+# In[65]:
+
+for listings_wrapper in souped2.find_all("article", class_="listing-maxi"):
+    title = listings_wrapper.get("data-q")
+    if title is not None:
+        print title.split("-")[-1]
+
+
+# In[ ]:
+
+
 
